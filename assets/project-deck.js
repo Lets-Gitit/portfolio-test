@@ -150,6 +150,11 @@
     if (lang && window.hljs && hljs.getLanguage(lang)) { code.className = `language-${lang}`; try { hljs.highlightElement(code); } catch { /* 강조 없이 */ } }
     return code.outerHTML;
   }
+  // 이미지 자리(원문 `> 📷 이미지 자리 \`images/…\` — 설명`) → 점선 상자. 글은 원문 설명 그대로
+  function slotHtml(el) {
+    const s = PF.md.slotOf(el) || { src: '', desc: '' };
+    return `<div class="pf-slot" data-pf-ui="slot"><span class="pf-slot-k">📷 ${esc(PF.t('deck.slot'))}</span><code>${esc(s.src)}</code>${s.desc ? `<p>${esc(s.desc)}</p>` : ''}</div>`;
+  }
   function vboxHtml(v, chunk) {
     if (v.status === 'missing' || v.status === 'ambiguous') return `<figure class="vbox err">${PF.vband(`visual-${v.status}`, v.detail, v.edited)}</figure>`;
     const warn = v.status === 'changed' ? PF.vband('visual-changed', v.detail, v.edited) : '';
@@ -159,6 +164,7 @@
       const alt = v.ref.caption?.text || v.el?.getAttribute('alt') || '';
       return `<figure class="vbox" data-kind="image"${v.d ? ` data-w="${v.d.w}" data-h="${v.d.h}"` : ''}><div class="vmedia">${PF.imgTag(v.src, alt, v.d)}</div>${cap(inline(alt))}</figure>`;
     }
+    if (k === 'slot') return `<figure class="vbox" data-kind="image" data-slot="1" data-w="1600" data-h="900"><div class="vmedia">${slotHtml(v.el)}</div>${cap(v.ref.caption?.text ? inline(v.ref.caption.text) : '')}</figure>`;
     if (k === 'mermaid') {
       const r = svgCache.get(v.el) || {};
       if (!r.svg) return `<figure class="vbox err">${PF.vband('visual-missing', `다이어그램을 그리지 못했습니다: ${r.error || ''}`)}</figure>`;
@@ -288,7 +294,13 @@
       { k: PF.t('en.techdoc'), label: PF.t('name.doc'), href: PF.docUrl(p.id), kind: 'page', visible: PF.visibleUrl(PF.docUrl(p.id)) },
       { k: PF.t('en.portfolio'), label: PF.t('name.portfolio'), href: 'index.html', kind: 'page', visible: PF.visibleUrl('') },
     ];
-    const cover = await PF.projectIntro(p, { id: 'cover', titleTag: 'h1', eyebrow: PF.t('deck.cover-eyebrow'), links: cards, foot, sec: PF.t('deck.cover'), stats: info.overflow });
+    // 대표 이미지가 아직 없으면 deck.cover(원문 이미지 자리)를 점선 상자로
+    let coverSlot = '';
+    if (!p.cover && p.deck?.cover?.kind === 'slot' && P) {
+      const r = PF.md.pick(P, p.deck.cover, p.deck.cover.sectionPath || []);
+      if (r.status === 'ok') coverSlot = slotHtml(r.el); else info.unresolved.push(`cover: ${r.detail}`);
+    }
+    const cover = await PF.projectIntro(p, { id: 'cover', titleTag: 'h1', eyebrow: PF.t('deck.cover-eyebrow'), links: cards, foot, sec: PF.t('deck.cover'), stats: info.overflow, coverSlot });
     if (auto) cover.querySelector('.pf-foot > span').insertAdjacentHTML('beforeend', '<span class="pf-autoband" data-pf-ui="note">예전 데이터로 자동 구성 — /portfolio-build를 다시 실행하면 발표 덱이 됩니다</span>');
 
     // 장 → 장 표지 + 장면들

@@ -32,11 +32,23 @@
     return { frag, headings, md, index: null };
   }
 
+  // 이미지 자리: 인용문 안의 문단 `> 📷 **이미지 자리** \`images/파일\` — 설명` (아직 찍지 않은 화면의 자리표시).
+  //   → { src, desc } 또는 null. 발표 덱이 점선 상자로 그림(kind: 'slot'). 실제 이미지로 바꾸면 다시 빌드해 kind: 'image'로
+  function slotOf(el) {
+    if (!el || el.tagName !== 'P' || el.parentElement?.tagName !== 'BLOCKQUOTE') return null;
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!/^📷/.test(text) || !/이미지 자리/.test(text)) return null;
+    const code = [...el.querySelectorAll('code')].map((c) => c.textContent.trim()).find((t) => /^(\.\/)?images\//i.test(t));
+    if (!code) return null;
+    const i = text.indexOf('—');
+    return { src: code, desc: i >= 0 ? text.slice(i + 1).trim() : '' };
+  }
+
   // 제목마다 그 절 범위(다음 제목 전까지, 수준 무관)의 블록 목록. 표 안 이미지는 표째로만
   function index(P) {
     if (P.index) return P.index;
     const map = new Map();
-    const bucket = () => ({ mermaid: [], code: [], table: [], image: [] });
+    const bucket = () => ({ mermaid: [], code: [], table: [], image: [], slot: [] });
     let cur = bucket();
     map.set(null, cur);
     const byEl = new Map(P.headings.map((h) => [h.el, h]));
@@ -48,6 +60,7 @@
         if (code && /\blanguage-mermaid\b/.test(code.className)) cur.mermaid.push(el); else cur.code.push(el);
       } else if (el.tagName === 'TABLE') cur.table.push(el);
       else if (el.tagName === 'IMG' && !el.closest('table')) cur.image.push(el);
+      else if (slotOf(el)) cur.slot.push(el);
     }
     return (P.index = map);
   }
@@ -90,13 +103,14 @@
     const kind = ref.kind;
     if (!b || !b[kind]) return { status: 'missing', heading: h, detail: `${kind} 종류 없음` };
     let list = b[kind];
-    if (kind === 'image') {
-      list = list.filter((i) => normSrc(i.dataset.mdSrc || i.getAttribute('src')) === normSrc(ref.src));
-      if (list.length > 1 && !ref.n) return { status: 'ambiguous', heading: h, detail: `이미지 ${ref.src} ${list.length}곳` };
+    if (kind === 'image' || kind === 'slot') {
+      const srcOf = (i) => (kind === 'slot' ? slotOf(i)?.src : i.dataset.mdSrc || i.getAttribute('src'));
+      list = list.filter((i) => normSrc(srcOf(i)) === normSrc(ref.src));
+      if (list.length > 1 && !ref.n) return { status: 'ambiguous', heading: h, detail: `${kind === 'slot' ? '이미지 자리' : '이미지'} ${ref.src} ${list.length}곳` };
     }
     const el = list[(ref.n || 1) - 1];
-    if (!el) return { status: 'missing', heading: h, detail: `${label}의 ${kind}${kind === 'image' ? ' ' + ref.src : ' ' + (ref.n || 1) + '번째'}` };
-    if (ref.fp && kind !== 'image' && !fpSame(fpOf(el, kind), ref.fp, kind)) return { status: 'changed', el, heading: h, detail: `${label}의 ${kind} ${ref.n || 1}번째: "${fpOf(el, kind)}"` };
+    if (!el) return { status: 'missing', heading: h, detail: `${label}의 ${kind}${kind === 'image' || kind === 'slot' ? ' ' + ref.src : ' ' + (ref.n || 1) + '번째'}` };
+    if (ref.fp && kind !== 'image' && kind !== 'slot' && !fpSame(fpOf(el, kind), ref.fp, kind)) return { status: 'changed', el, heading: h, detail: `${label}의 ${kind} ${ref.n || 1}번째: "${fpOf(el, kind)}"` };
     return { status: 'ok', el, heading: h };
   }
 
@@ -110,5 +124,5 @@
     return null;
   }
 
-  PF.md = { parse, index, findSection, pick, fpOf, firstVisual, isRelative, decode };
+  PF.md = { parse, index, findSection, pick, fpOf, firstVisual, isRelative, decode, slotOf };
 })();
