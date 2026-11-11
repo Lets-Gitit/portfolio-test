@@ -382,6 +382,26 @@
     };
     const modes = slides.length <= ROOMY_MAX ? ['roomy', 'normal', 'compact'] : ['normal', 'compact'];
     for (const m of modes) { const s = make(m); if (PF.fitsM(s)) return s; }
+    // 장면이 많아 목록이 넘치면 절(장 바로 아래 제목) 단위로 묶어 보여 줌 — 절마다 첫 장면으로 이동
+    const groups = [];
+    for (const x of slides) {
+      const sp = x.sl.sectionPath || [];
+      const key = sp.length > 1 ? sp[1] : (txt(x.sl.title) || c.title);
+      const g = groups.find((y) => y.key === key);
+      if (g) g.n += 1; else groups.push({ key, n: 1, ref: x.scenes[0].id });
+    }
+    if (groups.length < slides.length) {
+      const makeG = (mode) => {
+        const s = PF.scene({ id: chId, tpl: 'CH', kind: 'bare', cls: mode === 'compact' ? 'compact' : '', foot, sec: c.title, group: c.title, stitle: c.title });
+        const list = groups.map((g, i) => item(String(i + 1), g.key, PF.t('deck.ch-count', { n: g.n }), g.ref)).join('');
+        PF.body(s).innerHTML = `<div class="toprow"><span class="pf-eyebrow long">${esc(ptitle)}</span><span class="rl">${esc(PF.t('deck.ch-count', { n: slides.length }))}</span></div>
+          <div class="ch-mid"><div><p class="ch-no">${esc(PF.t('en.chapter'))} ${String(ci + 1).padStart(2, '0')}</p><h2 class="ch-t">${esc(c.title)}</h2>${DOT}</div>
+          <div class="ch-list t-P2${mode === 'normal' ? '' : ' ' + mode}"><ol class="toc-list sub">${list}</ol></div></div>`;
+        return band(s, auto);
+      };
+      for (const m of ['normal', 'compact']) { const s = makeG(m); if (PF.fitsM(s)) return s; }
+      return PF.shrinkOrClip(makeG('compact'), PFScene.refUrl(chId), info.overflow);
+    }
     return PF.shrinkOrClip(make('compact'), PFScene.refUrl(chId), info.overflow);
   }
 
